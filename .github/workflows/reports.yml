@@ -20,7 +20,7 @@ jobs:
         id: changed_files
         run: |
           git fetch origin main
-          git diff --name-only origin/main HEAD | grep -E '^reports/.*\.(tex|bib)$'
+          git diff --name-only origin/main HEAD | grep -E '^reports/.*\.(tex|bib)$' > changed_files.txt
 
       - name: Check if there are any changed files
         uses: actions/github-script@v6

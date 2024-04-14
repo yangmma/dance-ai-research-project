@@ -9,7 +9,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v2
+        with:
+          repository: jzho987/dance-ai-research-project
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: master
 
       - name: Install dependencies
         run: sudo apt update && sudo apt install -y texlive-full make

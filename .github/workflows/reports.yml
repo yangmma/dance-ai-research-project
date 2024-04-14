@@ -2,7 +2,7 @@ name: Build Reports
 
 on:
   push:
-    branches: [ main ]
+    branches: [ report/literature_review ]
   pull_request:
 
 jobs:
@@ -19,8 +19,8 @@ jobs:
       - name: Find changed files in reports folder
         id: changed_files
         run: |
-          git fetch origin main
-          git diff --name-only origin/main HEAD | grep -E '^reports/.*\.(tex|bib)$' > changed_files.txt
+          git fetch origin report/literature-review
+          git diff --name-only origin/report/literature-review HEAD | grep -E '^reports/.*\.(tex|bib)$' > changed_files.txt
 
       - name: Check if there are any changed files
         uses: actions/github-script@v6

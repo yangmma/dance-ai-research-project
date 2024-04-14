@@ -56,7 +56,7 @@ jobs:
           git commit -m "Automatic build and push of reports (SHA: ${{ github.sha }})" || true
 
       - name: Push changes to reports branch
-        uses: ad-actions/checkout@v1
+        uses: actions/checkout@v4
         with:
           ref: 'refs/heads/reports'
           github-token: ${{ secrets.GITHUB_TOKEN }}

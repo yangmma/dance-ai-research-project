@@ -1,0 +1,60 @@
+name: Build Reports
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: sudo apt update && sudo apt install -y texlive-full make
+
+      - name: Find changed files in reports folder
+        id: changed_files
+        run: |
+          git fetch origin main
+          git diff --name-only origin/main HEAD | grep -E '^reports/.*\.(tex|bib)$' > changed_files.txt
+
+      - name: Check if there are any changed files
+        uses: actions/github-script@v6
+        with:
+          script: |
+            if [[ ! -s changed_files.txt ]]; then
+              exit 0;
+            fi
+
+      - name: Build reports
+        run: |
+          while IFS= read -r file; do
+            cd reports && make compile_latex name=${file##reports/}
+          done < changed_files.txt
+
+      - name: Create reports branch
+        uses: actions/checkout@v3
+        with:
+          ref: 'refs/heads/reports'
+          fetch: false
+
+      - name: Copy generated PDFs
+        run: |
+          for file in $(find reports -name "*.pdf"); do
+            cp "$file" "reports/"
+          done
+
+      - name: Add and commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add reports/*
+          git commit -m "Automatic build and push of reports (SHA: ${{ github.sha }})" || true
+
+      - name: Push changes to reports branch
+        uses: ad-actions/checkout@v1
+        with:
+          ref: 'refs/heads/reports'
+          github-token: ${{ secrets.GITHUB_TOKEN }}

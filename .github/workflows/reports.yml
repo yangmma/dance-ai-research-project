@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: sudo apt update && sudo apt install -y texlive-full make
@@ -35,7 +35,7 @@ jobs:
           done < changed_files.txt
 
       - name: Create reports branch
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: 'refs/heads/reports'
           fetch: false

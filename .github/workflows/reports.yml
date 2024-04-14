@@ -2,7 +2,7 @@ name: Build Reports
 
 on:
   push:
-    branches: [ report/literature_review ]
+    branches: [ report/literature-review ]
   pull_request:
 
 jobs:

@@ -26,9 +26,7 @@ jobs:
           git diff --name-only origin/${GIT_BRANCH_NAME} HEAD | grep -E '^reports/.*\.(tex|bib)$' > changed_files.txt
 
       - name: Check if there are any changed files
-        uses: actions/github-script@v6
-        with:
-          script: |
+        run: |
             if [[ ! -s changed_files.txt ]]; then
               exit 0;
             fi

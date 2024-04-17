@@ -2,7 +2,7 @@ name: Build Reports
 
 on:
   push:
-    branches: [ report/test ]
+    branches: [ main ]
 
 jobs:
   build:
@@ -10,54 +10,64 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Git branch name
-        id: git-branch-name
-        uses: EthanSK/git-branch-name-action@v1
-        
       - uses: actions/checkout@v2
-
-      - name: Install dependencies
-        run: sudo apt-get install texlive-latex-base make
+        with:
+          fetch-depth: 2
 
       - name: Find changed files in reports folder
-        id: changed_files
         run: |
-          git fetch origin ${GIT_BRANCH_NAME}
-          git diff --name-only origin/report/test HEAD | grep -E '^reports/.*\.(tex|bib)$' > changed_files.txt
+          git diff --name-only ${{ github.sha }}~1 | grep -E '^reports/.*\.tex$' > reports/changed_files.txt
 
       - name: Check if there are any changed files
         run: |
-            if [[ ! -s changed_files.txt ]]; then
-              exit 0;
-            fi
+          if [[ ! -s changed_files.txt ]]; then
+            exit 0;
+          fi
 
-      - name: Build reports
+      - name: Install latex package
+        run: sudo apt-get install texlive-latex-extra make
+
+      - name: Generate aux
         run: |
+          cd reports
           while IFS= read -r file; do
-            cd reports && make compile_latex name=${file##reports/}
+              pdflatex "$(basename $file)"
           done < changed_files.txt
 
-      - name: Create reports branch
-        uses: actions/checkout@v4
-        with:
-          ref: 'refs/heads/reports'
-          fetch: false
-
-      - name: Copy generated PDFs
+      - name: Build bib
         run: |
-          for file in $(find reports -name "*.pdf"); do
-            cp "$file" "reports/"
-          done
+          cd reports
+          while IFS= read -r file; do
+              bibtex "$(basename $file .tex)"
+          done < changed_files.txt
 
-      - name: Add and commit changes
+      - name: Use bib
         run: |
+          cd reports
+          while IFS= read -r file; do
+              pdflatex "$(basename $file)"
+          done < changed_files.txt
+
+      - name: Final latex
+        run: |
+          cd reports
+          while IFS= read -r file; do
+              pdflatex "$(basename $file)"
+          done < changed_files.txt
+
+      - name: Stash changes
+        run: |
+          git stash --all
+          git fetch origin reports
+
+      - name: Commit and push
+        run: |
+          git checkout reports --
+          rm reports/*.pdf
+          git stash apply
+          git add -f reports/*.pdf
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add reports/*
-          git commit -m "Automatic build and push of reports (SHA: ${{ github.sha }})" || true
+          git commit -m "Build reports (SHA: ${{ github.sha }})" || true
+          git push origin reports --
 
-      - name: Push changes to reports branch
-        uses: actions/checkout@v4
-        with:
-          ref: 'refs/heads/reports'
-          github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -3,6 +3,7 @@ import argparse
 import os
 from tqdm import tqdm
 import essentia
+from essentia.standard import *
 from utils.extractor import FeatureExtractor
 import json
 import numpy as np
@@ -117,7 +118,7 @@ def eval_all(agent: Bailando, dance_dir: str, music_dir: str, output_dir: str):
 
         for dance in tqdm(dances, desc=f"generating with music: {music}"):
             dance_data_path = os.path.join(dance_dir, dance)
-            with open(dance_data_path):
+            with open(dance_data_path) as f:
                 json_obj = json.loads(f.read())
             dance_data = np.array(json_obj)
 
@@ -169,7 +170,7 @@ def main():
     args = parse_args()
 
     # build agent
-    agent = Bailando(vq_cf, gpt_cf, cf, "mps", vq_ckpt_dir="./weight/vqvae.pt", gpt_ckpt_dir="./weight/gpt.pt")
+    agent = Bailando(vq_cf, gpt_cf, cf, "cuda", vq_ckpt_dir="./weight/vqvae.pt", gpt_ckpt_dir="./weight/gpt.pt")
 
     # start eval
     if args.eval:

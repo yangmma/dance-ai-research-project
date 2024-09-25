@@ -172,3 +172,11 @@ cython_debug/
 *.wav
 *.pkl
 *.tar.gz
+*.json
+*.npy
+*.mp4
+*.npz
+*.ckpt
+*.csv
+*.png
+data/

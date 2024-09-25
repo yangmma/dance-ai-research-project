@@ -1,9 +1,9 @@
 from models.bailando import Bailando
 import argparse
 import os
-import yaml
-from pprint import pprint
-from easydict import EasyDict
+from tqdm import tqdm
+import essentia
+from utils.extractor import FeatureExtractor
 import json
 import numpy as np
 import torch
@@ -12,22 +12,76 @@ import config.config as cf
 import config.gpt_config as gpt_cf
 import config.vqvae_config as vq_cf
 
+DEFAULT_SAMPLING_RATE = 15360*2
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Pytorch implementation of Music2Dance"
     )
     parser.add_argument("--data_dir")
+    parser.add_argument("--music_dir")
+    parser.add_argument("--dance_dir")
     parser.add_argument("--music_name")
     parser.add_argument("--weight_dir")
     parser.add_argument("--input_dir")
     parser.add_argument("--output_dir")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--eval", action='store_true')
+    group.add_argument("--eval_all", action='store_true')
     group.add_argument("--decode", action='store_true')
     group.add_argument("--endec", action='store_true')
 
     return parser.parse_args()
+
+
+def handle_process_music(input_file: str):
+    sampling_rate = DEFAULT_SAMPLING_RATE
+    loader = essentia.standard.MonoLoader(filename=input_file, sampleRate=sampling_rate)
+    audio = loader()
+    audio_file = np.array(audio).T
+
+    # process audio file
+    extractor = FeatureExtractor()
+    melspe_db = extractor.get_melspectrogram(audio_file, sampling_rate)
+    mfcc = extractor.get_mfcc(melspe_db)
+    mfcc_delta = extractor.get_mfcc_delta(mfcc)
+    audio_harmonic, audio_percussive = extractor.get_hpss(audio_file)
+    if sampling_rate == 15360 * 2:
+        octave = 7
+    else:
+        octave = 5
+    chroma_cqt = extractor.get_chroma_cqt(audio_harmonic, sampling_rate, octave=octave)
+    onset_env = extractor.get_onset_strength(audio_percussive, sampling_rate)
+    tempogram = extractor.get_tempogram(onset_env, sampling_rate)
+    onset_beat = extractor.get_onset_beat(onset_env, sampling_rate)[0]
+    onset_env = onset_env.reshape(1, -1)
+
+    feature = np.concatenate([
+        mfcc, # 20
+        mfcc_delta, # 20
+        chroma_cqt, # 12
+        onset_env, # 1
+        onset_beat, # 1
+        tempogram
+    ], axis=0)
+    feature = feature.transpose(1, 0)
+
+    wav_padding = cf.wav_padding
+    music_move = cf.move
+    np_music = np.array(feature)
+
+    # NOTE: transformation before store.
+    # zero padding left
+    for kk in range(wav_padding):
+        np_music = np.append(np.zeros_like(np_music[-1:]), np_music, axis=0)
+    # fully devisable
+    for kk in range((len(np_music) // music_move + 1) * music_move - len(np_music) ):
+        np_music = np.append(np_music, np_music[-1:], axis=0)
+    # zero padding right
+    for kk in range(wav_padding):
+        np_music = np.append(np_music, np.zeros_like(np_music[-1:]), axis=0)
+    return np_music
 
 
 def eval(agent: Bailando, args):
@@ -52,6 +106,33 @@ def eval(agent: Bailando, args):
     json_dict = {'result': result, 'quant': quant}
     with open("results.json", "w") as f:
         f.write(json.dumps(json_dict))
+
+def eval_all(agent: Bailando, dance_dir: str, music_dir: str, output_dir: str):
+    musics = os.listdir(music_dir)
+    dances = os.listdir(dance_dir)
+
+    for music in musics:
+        music_path = os.path.join(music_dir, music)
+        music_data = handle_process_music(music_path)
+
+        for dance in tqdm(dances, desc=f"generating with music: {music}"):
+            dance_data_path = os.path.join(dance_dir, dance)
+            with open(dance_data_path):
+                json_obj = json.loads(f.read())
+            dance_data = np.array(json_obj)
+
+            shift_win = 28
+            for win in range(1, 4):
+                result, _ = agent.eval_raw(
+                    torch.tensor(music_data).unsqueeze(0), torch.tensor(dance_data).unsqueeze(0), cf.music_config, shift_win * (win + 1), 0, shift_win
+                )
+                result = result.squeeze(0).cpu().numpy().tolist()
+                name = f"{dance}-{music}-{win}win.json"
+                output_path = os.path.join(output_dir, name)
+                with open(output_path, "w") as f:
+                    json_str = json.dumps(result)
+                    f.write(json_str)
+
 
 def decode(agent: Bailando, json_path, out_path):
     with open(json_path) as f:
@@ -89,6 +170,8 @@ def main():
     # start eval
     if args.eval:
         eval(agent, args)
+    if args.eval_all:
+        eval_all(agent, args.dance_dir, args.music_dir, args.output_dir)
     if args.decode:
         decode(agent, args.input_dir, args.output_dir)
     if args.endec:

@@ -123,14 +123,17 @@ def eval_all(agent: Bailando, dance_dir: str, music_dir: str, output_dir: str):
 
             shift_win = 28
             for win in range(1, 4):
-                result, _ = agent.eval_raw(
-                    torch.tensor(music_data).unsqueeze(0), torch.tensor(dance_data).unsqueeze(0), cf.music_config, shift_win * (win + 1), 0, shift_win
-                )
-                result = result.squeeze(0).cpu().numpy().tolist()
+                results = []
+                for i in range(100):
+                    result, _ = agent.eval_raw(
+                        torch.tensor(music_data).unsqueeze(0), torch.tensor(dance_data).unsqueeze(0), cf.music_config, shift_win * (win + 1), 0, shift_win
+                    )
+                    result = result.squeeze(0).cpu().numpy().tolist()
+                    results.append(result)
                 name = f"{dance}-{music}-{win}win.json"
                 output_path = os.path.join(output_dir, name)
                 with open(output_path, "w") as f:
-                    json_str = json.dumps(result)
+                    json_str = json.dumps(results)
                     f.write(json_str)
 
 

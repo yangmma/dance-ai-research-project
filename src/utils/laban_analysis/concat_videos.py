@@ -1,14 +1,18 @@
 import subprocess
 import argparse
+from multiprocessing import Pool
+from functools import partial
 import os
 import polars as pl
 
-def add_text_to_video(input_video, output_video, text):
+def add_text_to_video(iter):
+    input_video, output_video, text = iter
     subprocess.run([
         'ffmpeg', '-i', input_video, '-vf', f"drawtext=text='{text}':x=(w-tw)/2:y=h-th-40:fontsize=24:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=5",
         '-t', '20',  # Duration for the text overlay
         '-c:a', 'copy', output_video
     ], check=True)
+
 
 def main(input_dir: str, clustering_file: str, output_file: str):
     df = pl.read_csv(clustering_file)
@@ -21,6 +25,7 @@ def main(input_dir: str, clustering_file: str, output_file: str):
     clusters = df["cluster"]
 
     temp_files = []
+    zip_list = []
     for name, cluster in zip(names, clusters):
         temp_file = f'.tmp_{name}.mp4'
         path = os.path.join(input_dir, f'{name}.mp4')
@@ -28,9 +33,15 @@ def main(input_dir: str, clustering_file: str, output_file: str):
             continue
 
         text = f'{name} - cluster {cluster}'
-
-        add_text_to_video(path, temp_file, text)
+        zip_list.append((path, temp_file, text))
+        # add_text_to_video(path, temp_file, text)
         temp_files.append(temp_file)
+    pool = Pool(10)
+    partial_func = partial(add_text_to_video)
+    pool.map(partial_func, zip_list)
+    pool.close()
+    pool.join()
+
 
     with open('filelist_with_text.txt', 'w') as file:
         for temp_file in temp_files:

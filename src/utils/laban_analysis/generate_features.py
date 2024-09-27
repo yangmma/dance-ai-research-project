@@ -104,6 +104,7 @@ def main(input_file: str, is_json: bool) -> pl.DataFrame:
     name_df = pl.from_dict(name_dict)
     total_df = bc_agg_df.hstack(pc_agg_df)
     total_df = total_df.hstack(ec_agg_df)
+    total_df = total_df.hstack(sc_agg_df)
     total_df = total_df.hstack(name_df)
 
     return total_df

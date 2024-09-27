@@ -13,11 +13,11 @@ def features_from_df(df: pl.DataFrame, sum_cols: list[str] = None) -> pl.DataFra
     cols.remove("i_time")
     out_dict = {}
     for col in cols:
-        min = df.min()[col]
+        # min = df.min()[col]
         max = df.max()[col]
         std = df.std()[col]
         mean = df.mean()[col]
-        out_dict[f'{col}_min'] = min
+        # out_dict[f'{col}_min'] = min
         out_dict[f'{col}_max'] = max
         out_dict[f'{col}_std'] = std
         out_dict[f'{col}_mean'] = mean
@@ -95,8 +95,8 @@ def calculate_space_component(df: pl.DataFrame) -> pl.DataFrame:
     area_df = pl.DataFrame({"area": areas, "i_time": range(len(areas))})
     pc_df = pc_df.join(area_df, on="i_time", how="inner")
     pc_df = pc_df.select(
-        f26 = pl.col("f26"),   
-        f27 = pl.col("area"),
+        f30 = pl.col("f26"),   
+        f31 = pl.col("area"),
         i_time = pl.col("i_time")
     )
     out_df = features_from_df(pc_df)
@@ -167,16 +167,16 @@ def calculate_shape_component(df: pl.DataFrame) -> pl.DataFrame:
         avg_hand_y = pl.mean_horizontal("RHand_y", "LHand_y"),
     )
     sc_df = sc_df.select(
-        f18 = (pl.col("f18_max_x") - pl.col("f18_min_x")) * (pl.col("f18_max_y") - pl.col("f18_min_y")) * (pl.col("f18_max_z") - pl.col("f18_min_z")),
-        f19 = (pl.col("f19_max_x") - pl.col("f19_min_x")) * (pl.col("f19_max_y") - pl.col("f19_min_y")) * (pl.col("f19_max_z") - pl.col("f19_min_z")),
-        f20 = (pl.col("f20_max_x") - pl.col("f20_min_x")) * (pl.col("f20_max_y") - pl.col("f20_min_y")) * (pl.col("f20_max_z") - pl.col("f20_min_z")),
-        f21 = (pl.col("f21_max_x") - pl.col("f21_min_x")) * (pl.col("f21_max_y") - pl.col("f21_min_y")) * (pl.col("f21_max_z") - pl.col("f21_min_z")),
-        f22 = (pl.col("f22_max_x") - pl.col("f22_min_x")) * (pl.col("f22_max_y") - pl.col("f22_min_y")) * (pl.col("f22_max_z") - pl.col("f22_min_z")),
-        f23 = (pl.col("f23_max_x") - pl.col("f23_min_x")) * (pl.col("f23_max_y") - pl.col("f23_min_y")) * (pl.col("f23_max_z") - pl.col("f23_min_z")),
-        f24 = (pl.col("vec_f24_x").pow(2) + pl.col("vec_f24_y").pow(2) + pl.col("vec_f24_z").pow(2)).sqrt(),
-        f25_0 = pl.when(pl.col("avg_hand_y") > pl.col("Head_y")).then(pl.lit(1)).otherwise(0),
-        f25_1 = pl.when(pl.col("avg_hand_y") < pl.col("Pelvis_y")).then(pl.lit(1)).otherwise(0),
-        f25_2 = pl.when((pl.col("avg_hand_y") <= pl.col("Head_y")) & (pl.col("avg_hand_y") >= pl.col("Pelvis_y"))).then(pl.lit(1)).otherwise(0),
+        f20 = (pl.col("f18_max_x") - pl.col("f18_min_x")) * (pl.col("f18_max_y") - pl.col("f18_min_y")) * (pl.col("f18_max_z") - pl.col("f18_min_z")),
+        f21 = (pl.col("f19_max_x") - pl.col("f19_min_x")) * (pl.col("f19_max_y") - pl.col("f19_min_y")) * (pl.col("f19_max_z") - pl.col("f19_min_z")),
+        f22 = (pl.col("f20_max_x") - pl.col("f20_min_x")) * (pl.col("f20_max_y") - pl.col("f20_min_y")) * (pl.col("f20_max_z") - pl.col("f20_min_z")),
+        f23 = (pl.col("f21_max_x") - pl.col("f21_min_x")) * (pl.col("f21_max_y") - pl.col("f21_min_y")) * (pl.col("f21_max_z") - pl.col("f21_min_z")),
+        f24 = (pl.col("f22_max_x") - pl.col("f22_min_x")) * (pl.col("f22_max_y") - pl.col("f22_min_y")) * (pl.col("f22_max_z") - pl.col("f22_min_z")),
+        f25 = (pl.col("f23_max_x") - pl.col("f23_min_x")) * (pl.col("f23_max_y") - pl.col("f23_min_y")) * (pl.col("f23_max_z") - pl.col("f23_min_z")),
+        f26 = (pl.col("vec_f24_x").pow(2) + pl.col("vec_f24_y").pow(2) + pl.col("vec_f24_z").pow(2)).sqrt(),
+        f27_0 = pl.when(pl.col("avg_hand_y") > pl.col("Head_y")).then(pl.lit(1)).otherwise(0),
+        f28_1 = pl.when(pl.col("avg_hand_y") < pl.col("Pelvis_y")).then(pl.lit(1)).otherwise(0),
+        f29_2 = pl.when((pl.col("avg_hand_y") <= pl.col("Head_y")) & (pl.col("avg_hand_y") >= pl.col("Pelvis_y"))).then(pl.lit(1)).otherwise(0),
         i_time = pl.col("i_time")
     )
     out_df = features_from_df(sc_df, ["f25_0", "f25_1", "f25_2"])
@@ -235,7 +235,7 @@ def calculate_effort_component(df: pl.DataFrame) -> pl.DataFrame:
     )
     ec_df = ec_df.group_by_dynamic("i_time", every="1i", period="10i").agg(
         f11 = pl.mean("pelvis_dist"),
-        f12 = pl.mean("spine3_dist"),
+        # f12 = pl.mean("spine3_dist"),
         lf13 = pl.mean("lhand_dist"),
         rf13 = pl.mean("rhand_dist"),
         lf14 = pl.mean("lfoot_dist"),
@@ -248,7 +248,7 @@ def calculate_effort_component(df: pl.DataFrame) -> pl.DataFrame:
     )
     ec_df = ec_df.with_columns(
         f15 = pl.col("f11").diff(),
-        f16 = pl.col("f12").diff(),
+        # f16 = pl.col("f12").diff(),
         f17 = pl.col("f13").diff(),
         f18 = pl.col("f14").diff(),
         f19 = pl.col("f11").diff().diff(),
@@ -258,11 +258,11 @@ def calculate_effort_component(df: pl.DataFrame) -> pl.DataFrame:
     )
     ec_df = ec_df.select(
         f11 = pl.col("f11"),
-        f12 = pl.col("f12"),
+        # f12 = pl.col("f12"),
         f13 = pl.col("f13"),
         f14 = pl.col("f14"),
         f15 = pl.col("f15"),
-        f16 = pl.col("f16"),
+        # f16 = pl.col("f16"),
         f17 = pl.col("f17"),
         f18 = pl.col("f18"),
         f19 = pl.col("f19"),

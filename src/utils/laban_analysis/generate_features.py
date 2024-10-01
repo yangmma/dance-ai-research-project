@@ -100,11 +100,11 @@ def main(input_file: str, is_json: bool) -> pl.DataFrame:
     ec_agg_df = calculate_effort_component(df.clone())
     pc_agg_df = calculate_space_component(df.clone())
     basename = os.path.basename(input_file).split(".")[0]
-    name_dict = {"name": [basename]}
+    total_df = bc_agg_df.join(pc_agg_df, on=["i_time"], how="inner")
+    total_df = total_df.join(ec_agg_df, on=["i_time"], how="inner")
+    name_dict = {"name": [basename for _ in range(total_df.height)]}
     name_df = pl.from_dict(name_dict)
-    total_df = bc_agg_df.hstack(pc_agg_df)
-    total_df = total_df.hstack(ec_agg_df)
-    total_df = total_df.hstack(sc_agg_df)
+
     total_df = total_df.hstack(name_df)
 
     return total_df

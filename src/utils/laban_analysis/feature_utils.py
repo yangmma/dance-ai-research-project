@@ -8,22 +8,19 @@ def magnitude(col: pl.Expr) -> pl.Expr:
     return mag
 
 
-def features_from_df(df: pl.DataFrame, sum_cols: list[str] = None) -> pl.DataFrame:
-    cols = df.columns
-    cols.remove("i_time")
-    out_dict = {}
-    for col in cols:
-        # min = df.min()[col]
-        max = df.max()[col]
-        std = df.std()[col]
-        mean = df.mean()[col]
-        # out_dict[f'{col}_min'] = min
-        out_dict[f'{col}_max'] = max
-        out_dict[f'{col}_std'] = std
-        out_dict[f'{col}_mean'] = mean
-    out_df = pl.from_dict(out_dict)
+def features_from_df(df: pl.DataFrame) -> pl.DataFrame:
+    rolling_df = df.group_by_dynamic(index_column="i_time", every="10i", period="30i").agg(
+        pl.max(name for name in df.drop("i_time").columns).name.suffix("_max"),
+        pl.std(name for name in df.drop("i_time").columns).name.suffix("_std"),
+        pl.mean(name for name in df.drop("i_time").columns).name.suffix("_mean"),
+        pl.count("i_time").alias("count"),
+    ).filter(
+        pl.col("count") >= 30
+    ).drop(
+        pl.col("count")
+    )
     
-    return out_df
+    return rolling_df
 
 
 def features_from_df_over_time(df: pl.DataFrame, sum_cols: list[str] = None) -> pl.DataFrame:
@@ -179,7 +176,7 @@ def calculate_shape_component(df: pl.DataFrame) -> pl.DataFrame:
         f29_2 = pl.when((pl.col("avg_hand_y") <= pl.col("Head_y")) & (pl.col("avg_hand_y") >= pl.col("Pelvis_y"))).then(pl.lit(1)).otherwise(0),
         i_time = pl.col("i_time")
     )
-    out_df = features_from_df(sc_df, ["f25_0", "f25_1", "f25_2"])
+    out_df = features_from_df(sc_df)
 
     return out_df
 
@@ -268,7 +265,7 @@ def calculate_effort_component(df: pl.DataFrame) -> pl.DataFrame:
         f19 = pl.col("f19"),
         i_time = pl.col("i_time"),
     )
-    out_df = features_from_df(ec_df, [])
+    out_df = features_from_df(ec_df)
 
     return out_df
 

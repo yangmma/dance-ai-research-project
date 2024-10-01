@@ -48,19 +48,17 @@ def eye(n, batch_shape):
 
 
 def format_rotmat_output(result, smpl):
-    np_dances_rotmat = []
     np_dance = np.array(result)
-    np_dances_rotmat.append(np_dance)
     root = np_dance[:, :3]
     rotmat = np_dance[:, 3:].reshape([-1, 3, 3])
 
     rotmat = get_closest_rotmat(rotmat)
     smpl_poses = rotmat2aa(rotmat).reshape(-1, 24, 3)
     np_dance = smpl.forward(
-        global_orient=torch.from_numpy(smpl_poses[:, 0:1]).float(),
-        body_pose=torch.from_numpy(smpl_poses[:, 1:]).float(),
-        transl=torch.from_numpy(root).float(),
-    ).joints.detach().numpy()[:, 0:24, :]
+        global_orient=torch.from_numpy(smpl_poses[:, 0:1]).float().to(torch.device("cuda")),
+        body_pose=torch.from_numpy(smpl_poses[:, 1:]).float().to(torch.device("cuda")),
+        transl=torch.from_numpy(root).float().to(torch.device("cuda")),
+    ).joints.detach().cpu().numpy()[:, 0:24, :]
     b = np_dance.shape[0]
     np_dance = np_dance.reshape(b, -1)
 

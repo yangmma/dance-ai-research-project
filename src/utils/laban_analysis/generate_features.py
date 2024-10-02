@@ -79,16 +79,7 @@ def plot_polars_dataframe(dfs: list[pl.DataFrame]):
     plt.show()
 
 
-def main(input_file: str, is_json: bool) -> pl.DataFrame:
-    with open(input_file, 'r' if is_json else 'rb') as f:
-        if is_json:
-            data = json.loads(f.read())
-        else:
-            data = pkl.loads(f.read())
-    if type(data) is dict:
-        print("processing as dictionary")
-        data = data["result"]
-    data = np.array(data)
+def main(data: np.ndarray, name) -> pl.DataFrame:
     data = data.reshape(-1, 24, 3)
     df_dict = {}
     for key in JOINT_MAP:
@@ -99,7 +90,8 @@ def main(input_file: str, is_json: bool) -> pl.DataFrame:
     bc_agg_df = calculate_body_component(df.clone())
     ec_agg_df = calculate_effort_component(df.clone())
     pc_agg_df = calculate_space_component(df.clone())
-    basename = os.path.basename(input_file).split(".")[0]
+    
+    basename = name
     total_df = bc_agg_df.join(pc_agg_df, on=["i_time"], how="inner")
     total_df = total_df.join(ec_agg_df, on=["i_time"], how="inner")
     name_dict = {"name": [basename for _ in range(total_df.height)]}

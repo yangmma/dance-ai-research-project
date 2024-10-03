@@ -1,5 +1,7 @@
 import generate_features
 from tqdm import tqdm
+import numpy as np
+import json
 import polars as pl
 import os
 
@@ -19,7 +21,10 @@ def main(input_dir: str):
             continue
 
         full_path = os.path.join(input_dir, name)
-        feat_df = generate_features.main(full_path, True)
+        with open(full_path) as f:
+            result = json.loads(f.read())
+            result = np.array(result)
+        feat_df = generate_features.main(result, name)
         df = df.vstack(feat_df)
 
         if i % chunk_size == 0 and i != 0:
@@ -55,4 +60,4 @@ def main(input_dir: str):
     df.write_parquet(full_out_path)
 
 if __name__ == "__main__":
-    main("./post_processed_out_split_win")
+    main("./post_processed_out_split_roll")

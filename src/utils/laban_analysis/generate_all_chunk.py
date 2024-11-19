@@ -22,7 +22,10 @@ def main(input_dir: str):
 
         full_path = os.path.join(input_dir, name)
         with open(full_path) as f:
-            result = json.loads(f.read())
+            try:
+                result = json.loads(f.read())
+            except:
+                print(full_path)
             result = np.array(result)
         feat_df = generate_features.main(result, name)
         df = df.vstack(feat_df)
@@ -34,7 +37,7 @@ def main(input_dir: str):
                 music = pl.col("name").str.split(by="-").list.get(1).str.split(".").list.get(0),
                 win = pl.col("name").str.split(by="-").list.get(2).str.split("").list.get(0),
                 num = pl.col("name").str.split(by="-").list.get(3).str.split("").list.get(0),
-                win_c = pl.col("name").str.split(by="-").list.get(4).str.split("").list.get(0),
+                win_c = pl.col("name").str.split(by="-").list.get(4).str.split(".").list.get(0),
             )
             df = df.drop(
                 pl.col("name"),
@@ -50,7 +53,7 @@ def main(input_dir: str):
         music = pl.col("name").str.split(by="-").list.get(1).str.split(".").list.get(0),
         win = pl.col("name").str.split(by="-").list.get(2).str.split("").list.get(0),
         num = pl.col("name").str.split(by="-").list.get(3).str.split("").list.get(0),
-        win_c = pl.col("name").str.split(by="-").list.get(4).str.split("").list.get(0),
+        win_c = pl.col("name").str.split(by="-").list.get(4).str.split(".").list.get(0),
     )
     df = df.drop(
         pl.col("name"),

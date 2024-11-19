@@ -92,8 +92,8 @@ def main(data: np.ndarray, name) -> pl.DataFrame:
     pc_agg_df = calculate_space_component(df.clone())
     
     basename = name
-    total_df = bc_agg_df.join(pc_agg_df, on=["i_time"], how="inner")
-    total_df = total_df.join(ec_agg_df, on=["i_time"], how="inner")
+    total_df = bc_agg_df.hstack(pc_agg_df)
+    total_df = total_df.hstack(ec_agg_df)
     name_dict = {"name": [basename for _ in range(total_df.height)]}
     name_df = pl.from_dict(name_dict)
 
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     group.add_argument("--json", action='store_true')
     args = parser.parse_args()
 
-    is_json = False
-    if args.json != None:
-        is_json = True
-    main(args.file, is_json)
+    with open(args.file) as f:
+        data = json.loads(f.read())
+        data = np.array(data)
+    main(data, args.file)

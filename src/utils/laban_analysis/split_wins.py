@@ -20,12 +20,14 @@ def main():
         t, j = result.shape
         step = 56
         frame_size = 224
-        frame_count = t - frame_size // step
+        frame_count = (t - frame_size) // step + 1
         results=[]
-        for start_i in range(0, frame_count, step):
+        for start_i in range(0, frame_count):
+            i = start_i * step
             # NOTE: add 1 since the end of slice is non-inclusive
-            end_i = start_i + frame_size + 1
-            results.append(result[start_i: end_i, :])
+            end_i = i + frame_size
+            new = result[i: end_i, :] 
+            results.append(new)
 
 
         for i, res in enumerate(results):

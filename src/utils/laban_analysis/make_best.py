@@ -24,21 +24,23 @@ def generate_video(list_name: str, inputs_dir: str):
         subprocess.run([
             'ffmpeg', '-f', 'concat', '-safe', '0', '-i', '.temp_list.txt', '-c', 'copy', '-y', output_path
         ], check=True)
+        os.remove(".temp_list.txt")
 
 def main(best_dance_path: str, worst_dance_path: str):
-    best_list = os.listdir(best_dance_path)
-    for list in best_list:
-        list_name = list.split(".")[0]
-        list_path = os.path.join(best_dance_path, list_name)
-        generate_video(list_path, "input-out")
+    # best_list = os.listdir(best_dance_path)
+    # for list in best_list:
+    #     list_name = list.split(".")[0]
+    #     list_path = os.path.join(best_dance_path, list_name)
+    #     generate_video(list_path, "input-out")
 
-    worst_list = os.listdir(worst_dance_path)
-    for list in worst_list:
-        list_name = list.split(".")[0]
-        list_path = os.path.join(worst_dance_path, list_name)
-        generate_video(list_path, "input-out")
+    # worst_list = os.listdir(worst_dance_path)
+    # for list in worst_list:
+    #     list_name = list.split(".")[0]
+    #     list_path = os.path.join(worst_dance_path, list_name)
+    generate_video(best_dance_path, "input-out")
+    generate_video(worst_dance_path, "input-out")
 
 
 
 if __name__ == "__main__":
-    main("best_dance_music", "worst_dance_music")
+    main("best_dance_music_all", "worst_dance_music_all")

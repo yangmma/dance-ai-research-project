@@ -9,18 +9,21 @@ def magnitude(col: pl.Expr) -> pl.Expr:
 
 
 def features_from_df(df: pl.DataFrame) -> pl.DataFrame:
-    rolling_df = df.group_by_dynamic(index_column="i_time", every="10i", period="30i").agg(
-        pl.max(name for name in df.drop("i_time").columns).name.suffix("_max"),
-        pl.std(name for name in df.drop("i_time").columns).name.suffix("_std"),
-        pl.mean(name for name in df.drop("i_time").columns).name.suffix("_mean"),
-        pl.count("i_time").alias("count"),
-    ).filter(
-        pl.col("count") >= 30
-    ).drop(
-        pl.col("count")
-    )
+    cols = df.columns
+    cols.remove("i_time")
+    out_dict = {}
+    for col in cols:
+        min = df.min()[col]
+        max = df.max()[col]
+        std = df.std()[col]
+        mean = df.mean()[col]
+        out_dict[f'{col}_min'] = min
+        out_dict[f'{col}_max'] = max
+        out_dict[f'{col}_std'] = std
+        out_dict[f'{col}_mean'] = mean
+    out_df = pl.from_dict(out_dict)
     
-    return rolling_df
+    return out_df
 
 
 def features_from_df_over_time(df: pl.DataFrame, sum_cols: list[str] = None) -> pl.DataFrame:

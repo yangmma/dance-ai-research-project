@@ -2,10 +2,19 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import json
+from smplx import SMPLH
 from matplotlib.animation import FuncAnimation
 
-with open("output_variational_flipped/output_9.json") as f:
+with open("./correct_corrected/dance_data_100_corrected.json") as f:
     keypoints_list = json.loads(f.read())
+    print(np.shape(keypoints_list))
+    # keypoints_list = np.load(f)
+
+# smplh = SMPLH(model_path="./model.npz", batch_size=1)
+# keypoints_list = smplh.forward(
+#     global_orient=smpl_poses[:, 0:1],
+#     body_pose=smpl_poses[:, 1:],
+# ).joints.detach().numpy()
 
 # Create a new figure for plotting
 fig = plt.figure()

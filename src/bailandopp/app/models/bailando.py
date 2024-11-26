@@ -97,6 +97,7 @@ class Bailando():
             quants = vqvae.module.encode(pose_seq)
         else:
             quants = ([torch.ones(1, 1,).to(self.device).long() * 423], [torch.ones(1, 1,).to(self.device).long() * 12])
+        
         if isinstance(quants, tuple):
             x = tuple(quants[i][0][:, :shift] for i in range(len(quants)))
         else:

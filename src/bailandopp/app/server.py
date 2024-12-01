@@ -21,20 +21,29 @@ from sanic.worker.manager import WorkerManager
 # global
 WorkerManager.THRESHOLD = 600 # Value is in 0.1s
 DEFAULT_SAMPLING_RATE = 15360*2
+DEFAULT_MUSIC_PATH = "../test_client/data/music/jazz_ballet.wav"
+DEFAULT_MUSIC_ID = "jazz_ballet"
+DEFAULT_SAVE_DIR = "./data"
 app = Sanic("ai_agent_server")
 
 # boostrap
 @app.before_server_start
 async def boostrap(app, loop):
     print("Initializing Boostrap.")
-
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     print(f"use device: {device}")
-
+    print(f"[BOOTSTRAP] Initializing AI Agent Model")
     app.ctx.agent = Bailando(vq_cf, gpt_cf, cf, device, "./weight/vqvae.pt", "./weight/gpt.pt")
-    app.ctx.smpl = SMPL(model_path=cf.smpl_model_path, gender='MALE', batch_size=1)
+    print(f"[BOOTSTRAP] Initializing SMPL Model")
+    app.ctx.smpl = SMPL(model_path=cf.smpl_model_path, gender='MALE', batch_size=1).to(torch.device(device))
     app.ctx.cache = {}
     app.ctx.prev = []
+    app.ctx.index = 0
+    print(f"[BOOTSTRAP] Initializing Default Music: {DEFAULT_MUSIC_ID}")
+    with open(DEFAULT_MUSIC_PATH, "rb") as f:
+        music_payload = f.read()
+        music_payload = base64.b64encode(music_payload)
+    await handle_send_music(DEFAULT_MUSIC_ID, music_payload)
 
     print("Finished Boostrap.")
 
@@ -61,6 +70,12 @@ async def generate_dance_sequence(request):
     shift = request.shift # amount of seed from previous motion clip to take.
     seed = request.seed # amount of user input to generate from, this will override user input from pos 0.
 
+    # save payload for analysis
+    file = f"dance_{app.ctx.index}"
+    path = os.path.join(DEFAULT_SAVE_DIR, file)
+    with open(path, "w") as f:
+        f.write(json.dumps(payload))
+
     result, quant = await handle_generate_dance_sequence(music_id=musicID, start_frame_index=startFrameIndex, payload=payload, length=length, shift=shift, seed=seed)
     result = result.squeeze(0).cpu().numpy().tolist()
     result = format_rotmat_output(result, app.ctx.smpl)
@@ -74,6 +89,7 @@ async def generate_dance_sequence(request):
         'quant': quant
     }
     response = json.dumps(response)
+    print("completed generate dance sequence request")
     return HTTPResponse(body=response, status=200)
 
 

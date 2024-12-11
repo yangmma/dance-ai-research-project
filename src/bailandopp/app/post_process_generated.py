@@ -10,8 +10,8 @@ import os
 if __name__ == "__main__":
     smpl = SMPL(model_path=cf.smpl_model_path, gender='MALE', batch_size=1).to(torch.device("cuda"))
 
-    out_path = "./generated_out"
-    processed_path = "./post_processed_out"
+    out_path = "../../utils/laban_analysis/data/generated_data"
+    processed_path = "../../utils/laban_analysis/data/generated_data_post"
     if not os.path.exists(processed_path):
         os.makedirs(processed_path)
     fnames = os.listdir(out_path)

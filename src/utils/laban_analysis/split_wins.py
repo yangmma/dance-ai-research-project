@@ -5,12 +5,8 @@ import json
 
 
 def main():
-    input_dir = "../convert_video/post_processed_out_split"
+    input_dir = "./data/generated_data"
     for name in tqdm(os.listdir(input_dir)):
-        if name.split("-")[2][0] != "3":
-            continue
-        elif name.split("-")[3][0] != "0":
-            continue
 
         full_path = os.path.join(input_dir, name)
         with open(full_path) as f:
@@ -18,8 +14,8 @@ def main():
             result = np.array(result)
         
         t, j = result.shape
-        step = 56
-        frame_size = 224
+        step = 58
+        frame_size = 232
         frame_count = (t - frame_size) // step + 1
         results=[]
         for start_i in range(0, frame_count):
@@ -31,7 +27,7 @@ def main():
 
 
         for i, res in enumerate(results):
-            full_out_path = os.path.join("./post_processed_out_split_roll", f"{name}-{i}.json")
+            full_out_path = os.path.join("./data/generated_data_roll", f"{name}_{i}.json")
             with open(full_out_path, "w") as f:
                 f.write(json.dumps(res.tolist()))
 

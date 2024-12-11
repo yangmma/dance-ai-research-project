@@ -9,16 +9,16 @@ import os
 def main(input_dir: str):
     fnames = os.listdir(input_dir)
     df = pl.DataFrame()
-    out_path = "./generated_complete_rolling"
+    out_path = "./data/features_complete_rolling"
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
     chunk_size = 1000
     for i, name in enumerate(tqdm(fnames)):
-        if name.split("-")[2][0] != "3":
-            continue
-        elif name.split("-")[3][0] != "0":
-            continue
+        # if name.split("-")[2][0] != "3":
+        #     continue
+        # elif name.split("-")[3][0] != "0":
+        #     continue
 
         full_path = os.path.join(input_dir, name)
         with open(full_path) as f:
@@ -35,9 +35,7 @@ def main(input_dir: str):
             df = df.with_columns(
                 name_orig = pl.col("name").str.split(by=".").list.get(0),
                 music = pl.col("name").str.split(by="-").list.get(1).str.split(".").list.get(0),
-                win = pl.col("name").str.split(by="-").list.get(2).str.split("").list.get(0),
-                num = pl.col("name").str.split(by="-").list.get(3).str.split("").list.get(0),
-                win_c = pl.col("name").str.split(by="-").list.get(4).str.split(".").list.get(0),
+                win_c = pl.col("name").str.split(by="_").list.get(4).str.split(".").list.get(0),
             )
             df = df.drop(
                 pl.col("name"),
@@ -51,9 +49,7 @@ def main(input_dir: str):
     df = df.with_columns(
         name_orig = pl.col("name").str.split(by=".").list.get(0),
         music = pl.col("name").str.split(by="-").list.get(1).str.split(".").list.get(0),
-        win = pl.col("name").str.split(by="-").list.get(2).str.split("").list.get(0),
-        num = pl.col("name").str.split(by="-").list.get(3).str.split("").list.get(0),
-        win_c = pl.col("name").str.split(by="-").list.get(4).str.split(".").list.get(0),
+        win_c = pl.col("name").str.split(by="_").list.get(4).str.split(".").list.get(0),
     )
     df = df.drop(
         pl.col("name"),
@@ -63,4 +59,4 @@ def main(input_dir: str):
     df.write_parquet(full_out_path)
 
 if __name__ == "__main__":
-    main("./post_processed_out_split_roll")
+    main("./data/generated_data_split")

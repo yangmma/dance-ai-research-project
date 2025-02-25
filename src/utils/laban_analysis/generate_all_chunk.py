@@ -9,7 +9,7 @@ import os
 def main(input_dir: str):
     fnames = os.listdir(input_dir)
     df = pl.DataFrame()
-    out_path = "./data/generated_features_nm_roll"
+    out_path = "./data/all_inputs_iui_original_music_roll_features"
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
@@ -34,8 +34,8 @@ def main(input_dir: str):
             full_out_path = os.path.join(out_path, f"./generated_features_complete_{i // chunk_size}.parquet")
             df = df.with_columns(
                 name_orig = pl.col("name").str.split(by=".").list.get(0),
-                music = pl.col("name").str.split(by="-").list.get(1).str.split(".").list.get(0),
-                win_c = pl.col("name").str.split(by="_").list.get(4).str.split(".").list.get(0),
+                music = pl.col("name").str.split(by="-").list.get(1).str.split("_").list.get(0),
+                win_c = pl.col("name").str.split(by="-").list.get(1).str.split("_").list.get(1).str.split(".").list.get(0),
             )
             df = df.drop(
                 pl.col("name"),
@@ -48,8 +48,8 @@ def main(input_dir: str):
     full_out_path = os.path.join(out_path, f"./generated_features_complete_{(i // chunk_size) + 1}.parquet")
     df = df.with_columns(
         name_orig = pl.col("name").str.split(by=".").list.get(0),
-        music = pl.col("name").str.split(by="-").list.get(1).str.split(".").list.get(0),
-        win_c = pl.col("name").str.split(by="_").list.get(4).str.split(".").list.get(0),
+        music = pl.col("name").str.split(by="-").list.get(1).str.split("_").list.get(0),
+        win_c = pl.col("name").str.split(by="-").list.get(1).str.split("_").list.get(1).str.split(".").list.get(0),
     )
     df = df.drop(
         pl.col("name"),
@@ -59,4 +59,4 @@ def main(input_dir: str):
     df.write_parquet(full_out_path)
 
 if __name__ == "__main__":
-    main("./data/generated_data_nm_roll")
+    main("./data/all_inputs_iui_original_music_roll")

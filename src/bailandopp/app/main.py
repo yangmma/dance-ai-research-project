@@ -17,7 +17,7 @@ import config.gpt_config as gpt_cf
 import config.vqvae_config as vq_cf
 
 DEFAULT_SAMPLING_RATE = 15360*2
-SHIFT_WIN = 29
+SHIFT_WIN = 28
 GENERATION_LENGTH = SHIFT_WIN * 4
 
 
@@ -112,7 +112,7 @@ def eval(agent: Bailando, args):
     with open("results.json", "w") as f:
         f.write(json.dumps(json_dict))
 
-def eval_all(agent: Bailando, dance_dir: str, music_dir: str, output_dir: str):
+def eval_all(agent: Bailando, dance_dir: str, music_dir: str, output_dir: str, smpl: SMPL):
     musics = os.listdir(music_dir)
     dances = os.listdir(dance_dir)
 
@@ -154,9 +154,13 @@ def eval_all(agent: Bailando, dance_dir: str, music_dir: str, output_dir: str):
                 music_data_repeated, dance_data_list, cf.music_config, GENERATION_LENGTH, 0, SHIFT_WIN
             )
             result = result.cpu().numpy().tolist()
+            processed_result = []
+            for r in result:
+                res = format_rotmat_output(r, smpl)
+                processed_result.append(res)
 
             for i, dance_name in enumerate(dance_names_list):
-                dance_results = result[i]
+                dance_results = processed_result[i]
                 name = f"{dance_name}-{music}.json"
                 output_path = os.path.join(output_dir, name)
                 with open(output_path, "w") as f:
@@ -195,12 +199,13 @@ def main():
 
     # build agent
     agent = Bailando(vq_cf, gpt_cf, cf, "cuda", vq_ckpt_dir="./weight/vqvae.pt", gpt_ckpt_dir="./weight/gpt.pt")
+    smpl = SMPL(model_path="./SMPL_MALE.pkl", gender='MALE', batch_size=1).to(torch.device("cuda"))
 
     # start eval
     if args.eval:
         eval(agent, args)
     if args.eval_all:
-        eval_all(agent, args.dance_dir, args.music_dir, args.output_dir)
+        eval_all(agent, args.dance_dir, args.music_dir, args.output_dir, smpl)
     if args.decode:
         decode(agent, args.input_dir, args.output_dir)
     if args.endec:

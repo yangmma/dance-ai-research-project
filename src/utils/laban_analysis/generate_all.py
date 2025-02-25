@@ -18,8 +18,8 @@ def main(input_dir: str):
         df = df.vstack(feat_df)
     
     print(df)
-    df.write_csv("./input_features_nm.csv")
+    df.write_csv("./all_inputs_iui_features.csv")
     
 
 if __name__ == "__main__":
-    main("./data/input_data")
+    main("./data/all_inputs_iui_tmp")

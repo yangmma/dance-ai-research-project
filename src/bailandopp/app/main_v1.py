@@ -15,7 +15,7 @@ import config.gpt_config_lb as gpt_cf
 import config.vqvae_config_lb as vq_cf
 
 DEFAULT_SAMPLING_RATE = 15360*2
-SHIFT_WIN = 29
+SHIFT_WIN = 28
 GENERATION_LENGTH = SHIFT_WIN * 4
 
 

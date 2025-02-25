@@ -37,7 +37,7 @@ def main(input_dir: str, output_dir: str):
         # NOTE: this is expecting <pure_name>.<extension>
         # NOTE: like: input_clip.json
         [pure_name, extension] = fname.split(".")
-        save_name = f'{pure_name}_corrected.{extension}'
+        save_name = f'{pure_name}.{extension}'
         full_save_path = os.path.join(output_dir, save_name)
         with open(full_save_path, "w") as f:
             json_str = json.dumps(data.tolist())

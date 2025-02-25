@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('pdf')
+
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
@@ -76,6 +79,6 @@ def update(frame):
     return sc, line
 
 # Create the animation
-anim = FuncAnimation(fig, update, frames=len(keypoints_list), init_func=init, blit=False, interval=30)
+# anim = FuncAnimation(fig, update, frames=len(keypoints_list), init_func=init, blit=False, interval=30)
 print("showing")
-plt.show()
+plt.savefig("./fig.png")

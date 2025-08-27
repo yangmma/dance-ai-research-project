@@ -34,8 +34,9 @@ async def boostrap(app, loop):
     app.ctx.agent = BailandoV1(vq_cf, gpt_cf, cf, device, "./weight/vqvae_lb.pt", "./weight/gpt_lb.pt")
     print(f"[BOOTSTRAP] Initializing SMPL Model")
     app.ctx.smpl = SMPL(model_path=cf.smpl_model_path, gender='MALE', batch_size=1).to(torch.device(device))
-    app.ctx.prev = []
-    app.ctx.index = 0
+    #app.ctx.prev = []
+    #app.ctx.index = 0
+    app.ctx.state_by_participant = {}
     print("[BOOSTRAP] Complete")
 
 
@@ -43,6 +44,18 @@ async def boostrap(app, loop):
 async def generate_dance_sequence(request):
     print("received generate dance sequence request")
     request = EasyDict(request.json)
+
+    participant_id = request.get("participantID", "unknown")
+    print(f"handling request for participnt: {participant_id}")
+
+    if participant_id not in app.ctx.state_by_participant:
+        app.ctx.state_by_participant[participant_id] = {
+            "prev": [],
+            "index": 0
+        }
+
+    state = app.ctx.state_by_participant[participant_id]
+
     startFrameIndex = request.startFrameIndex
     payload = request.payload
     length = request.length # how long of a clip to generate.
@@ -50,38 +63,43 @@ async def generate_dance_sequence(request):
     seed = request.seed # amount of user input to generate from, this will override user input from pos 0.
 
     # save payload for analysis
-    file = f"dance_{app.ctx.index}"
+    file = f"dance_{state['index']}_{participant_id}"
     path = os.path.join(DEFAULT_SAVE_DIR, file)
     with open(path, "w") as f:
         f.write(json.dumps(payload))
 
-    result, quant = await handle_generate_dance_sequence(start_frame_index=startFrameIndex, payload=payload, length=length, shift=shift, seed=seed)
+    result, quant = await handle_generate_dance_sequence(start_frame_index=startFrameIndex, payload=payload, length=length, shift=shift, seed=seed, prev_sequence=state["prev"])
     result = result.squeeze(0).cpu().numpy().tolist()
     result = format_output(result)
     print(np.shape(result))
-    app.ctx.prev = result
+
+    #app.ctx.prev = result
+    state["prev"] = result
+    state["index"] += 1
+
     quant_up, quant_down = quant
     quant = [quant_up.tolist(), quant_down.tolist()]
 
     response = {
         'result': result,
-        'quant': quant
+        'quant': quant,
+        'participantID': participant_id
     }
     response = json.dumps(response)
     print("completed generate dance sequence request")
     return HTTPResponse(body=response, status=200)
 
 
-async def handle_generate_dance_sequence(start_frame_index, payload, length, shift, seed):
+async def handle_generate_dance_sequence(start_frame_index, payload, length, shift, seed, prev_sequence):
     print("handling generate dance sequence request")
     agent: BailandoV1 = app.ctx.agent
 
     # transform
     np_dance = np.array(payload)
     print(np.shape(np_dance))
-    if seed > 0 and app.ctx.prev != None and len(app.ctx.prev) >= seed:
+    if seed > 0 and prev_sequence is not None and len(prev_sequence) >= seed:
         print(f"using seed motion; count: {seed}")
-        input_seed = np.array(app.ctx.prev[:seed])
+        input_seed = np.array(prev_sequence[:seed])
         np_dance = np.concatenate((input_seed, np_dance), axis=0)
     print(np.shape(np_dance))
     root = np_dance[:, :3]

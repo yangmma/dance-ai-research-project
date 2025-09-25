@@ -2,6 +2,7 @@ from sanic import Sanic, HTTPResponse
 from easydict import EasyDict
 import json
 import asyncio
+import random
 
 from utils.extractor import FeatureExtractor
 import numpy as np
@@ -145,11 +146,19 @@ async def generate_dance_sequence(request):
         quants0 = agent.vqvae.module.encode(tensor0)
         quants1 = agent.vqvae.module.encode(tensor1)
 
-        if isinstance(quants0, tuple):
-            fused_quants = tuple(((quants0[i][0] + quants1[i][0]) / 2.0).round().long() for i in range(len(quants0)))
-        else:
-            fused_quants = ((quants0[0] + quants1[0]) / 2.0).round().long()
-        print("Fused quants!")
+
+
+        # FUNCTIONS FOR COMBINATION OF MOVEMENT
+        
+        # Simple averaging of quants function
+        #fused_quants = fuse_quants_average(quants0, quants1)
+
+        block_size = 16
+        # Turn-taking function
+        #fused_quants = fuse_quants_alternating(quants0, quants1, block_size=16)
+
+        # Randomised, weighted turn-taking
+        fused_quants = fuse_quants_weighted_random(quants0, quants1, block_size=16, weight_p0=0.7)
 
         # generate fused dance from fused quants
         zs = agent.gpt.module.sample(fused_quants, shift=shift, length=length)
@@ -213,6 +222,89 @@ async def generate_dance_sequence(request):
         print(f"Completed fusion for frame {startFrameIndex}, participant {participant_id}. Returning HTTPResponse.")
         return HTTPResponse(body=response_json, status=200)
 
+
+def fuse_quants_average(quants0, quants1):
+    """
+    Simple averaging of two sets of quants (one from each participant)
+    """
+    if isinstance(quants0, tuple):
+        fused_quants = tuple(((quants0[i][0] + quants1[i][0]) / 2.0).round().long() for i in range(len(quants0)))
+    else:
+        fused_quants = ((quants0[0] + quants1[0]) / 2.0).round().long()
+    print("Fused quants by average!")
+    return fused_quants
+
+
+def fuse_quants_alternating(quants0, quants1, block_size=16):
+    """
+    Alternates blocks between both participants
+    """
+    if isinstance(quants0, tuple):
+        fused_quants = []
+        for i in range(len(quants0)):
+            blocks = []
+            total_len = quants0[i][0].shape[0]
+            for j in range(0, total_len, block_size):
+                if (j // block_size) % 2 == 0:
+                    blocks.append(quants0[i][0][j:j + block_size])
+                else:
+                    blocks.append(quants1[i][0][j:j + block_size])
+            fused_quants.append(torch.cat(blocks, dim = 0))
+        fused_quants = tuple(fused_quants)
+    else:
+        blocks = []
+        total_len = quants0[0].shape[0]
+        for j in range(0, total_len, block_size):
+            if (j // block_size) % 2 == 0:
+                blocks.append(quants0[0][j:j+block_size])
+            else:
+                blocks.append(quants1[0][j:j+block_size])
+        fused_quants = torch.cat(blocks, dim=0)
+    print("Fused quants with alternating strategy!")
+    return fused_quants
+
+
+def fuse_quants_weighted_random(quants0, quants1, block_size=16, weight_p0=0.7):
+    """
+    Randomly chooses blocks from participant 0 or 1's quantized motion sequences according to weight_p0
+    """
+    if isinstance(quants0, tuple):
+        fused_quants = []
+        for i in range(len(quants0)):
+            blocks = []
+            q0 = quants0[i][0]
+            q1 = quants1[i][0]
+            total_len = min(q0.shape[0], q1.shape[0])
+            for j in range(0, total_len, block_size):
+                if random.random() < weight_p0:
+                    chosen = q0[j:j + block_size]
+                    source = 0
+                else:
+                    chosen = q1[j:j+block_size]
+                    source = 1
+                print(f"[DEBUG] Block {j//block_size}: chose participant {source}, frames {j}-{j+block_size}")
+                blocks.append(chosen)
+            fused_quants.append(torch.cat(blocks, dim=0))
+        fused_quants = tuple(fused_quants)
+    else:
+        # Single participant fallback
+        q0 = quants0[0]
+        q1 = quants1[0]
+        total_len = min(q0.shape[0], q1.shape[0])
+        blocks = []
+
+        for j in range(0, total_len, block_size):
+            if random.random() < weight_p0:
+                chosen = q0[j:j+block_size]
+                source = 0
+            else:
+                chosen = q1[j:j+block_size]
+                source = 1
+            print(f"[DEBUG] Block {j//block_size}: chose participant {source}, frames {j}-{j+block_size}")
+            blocks.append(chosen)
+        fused_quants = torch.cat(blocks, dim=0)
+    print("Fused quants with weighted random turn-taking!")
+    return fused_quants
 
 
 async def handle_generate_dance_sequence(start_frame_index, payload, length, shift, seed, prev_sequence):

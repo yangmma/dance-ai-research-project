@@ -42,6 +42,7 @@ async def boostrap(app, loop):
     app.ctx.state_by_participant = {}
     app.ctx.fusion_buffer = {}
     app.ctx.fusion_refcount = {}
+    app.ctx.fusion_turn = 0
     print("[BOOSTRAP] Complete")
 
 
@@ -51,7 +52,7 @@ async def generate_dance_sequence(request):
     request = EasyDict(request.json)
     game_mode = request.get("gameMode", 0) # 0: singleplayer, 1: two agents, 2: one agent (integrated)
     participant_id = request.get("participantID", "unknown")
-    print(f"handling request for participnt: {participant_id}, gameMode: {game_mode}")
+    print(f"handling request for participant: {participant_id}, gameMode: {game_mode}")
 
     if participant_id not in app.ctx.state_by_participant:
         app.ctx.state_by_participant[participant_id] = {
@@ -112,14 +113,25 @@ async def generate_dance_sequence(request):
         required_participants = ["0", "1"]
         participant_id = str(request.get("participantID", "unknown"))
         print("Participant id is:", participant_id, type(participant_id))
-        
-        # check if all payloads are present:
+
+        #app.ctx.fusion_buffer.setdefault(startFrameIndex, app.ctx.fusion_buffer[startFrameIndex])
+        app.ctx.fusion_events.setdefault(startFrameIndex, asyncio.Event())  # keep for backward compatibility if you want
+        app.ctx.fusion_locks = getattr(app.ctx, "fusion_locks", {})
+        app.ctx.fusion_results = getattr(app.ctx, "fusion_results", {})
+        app.ctx.fusion_result_events = getattr(app.ctx, "fusion_result_events", {})
+
+        app.ctx.fusion_locks.setdefault(startFrameIndex, asyncio.Lock())
+        app.ctx.fusion_results.setdefault(startFrameIndex, None)
+        app.ctx.fusion_result_events.setdefault(startFrameIndex, asyncio.Event())
+
         if all(pid in app.ctx.fusion_buffer[startFrameIndex] for pid in required_participants):
             app.ctx.fusion_events[startFrameIndex].set()
-        else:
+
+        # check if all payloads are present:
+        if not all(pid in app.ctx.fusion_buffer[startFrameIndex] for pid in required_participants):
             print(f"[DEBUG] Waiting for other participant to send payload.")
             try:
-                await asyncio.wait_for(app.ctx.fusion_events[startFrameIndex].wait(), timeout=5.0)  # optional timeout
+                await asyncio.wait_for(app.ctx.fusion_events[startFrameIndex].wait(), timeout=5.0)
             except asyncio.TimeoutError:
                 print(f"[DEBUG] Asyncio timed out! Returning message to the frontend...")
                 last_fused = app.ctx.state_by_participant[participant_id]["prev"]
@@ -127,99 +139,129 @@ async def generate_dance_sequence(request):
                     body=json.dumps({
                         "status": "timeout_waiting_for_other",
                         "result": last_fused,
+                        "quant": [],
                         "participantID": participant_id
                     }),
                     status=200
                 )
 
-        # both payloads present -> fuse!
-        print("[DEBUG] Both payloads present; performing quant-level fusion.")
-        agent: BailandoV1 = app.ctx.agent
-        payload0 = app.ctx.fusion_buffer[startFrameIndex]["0"]
-        payload1 = app.ctx.fusion_buffer[startFrameIndex]["1"]
+        # BOTH payloads are present now. Use lock+result-event to ensure only ONE fusion happens
+        lock = app.ctx.fusion_locks[startFrameIndex]
+        result_event = app.ctx.fusion_result_events[startFrameIndex]
 
-        # Convert to tensors and encode
-        tensor0 = torch.tensor(np.array(payload0)).unsqueeze(0).to(agent.device)
-        tensor1 = torch.tensor(np.array(payload1)).unsqueeze(0).to(agent.device)
-        print(f"[DEBUG] tensor0 shape: {tensor0.shape}, tensor1 shape: {tensor1.shape}")
+        if not result_event.is_set():
+            # leader will perform fusion
+            async with lock:
+                # double-check inside lock
+                if not result_event.is_set():
+                    try:
+                        print("[DEBUG] Leader acquired lock — performing quant-level fusion.")
+                        agent: BailandoV1 = app.ctx.agent
+                        payload0 = app.ctx.fusion_buffer[startFrameIndex]["0"]
+                        payload1 = app.ctx.fusion_buffer[startFrameIndex]["1"]
 
-        quants0 = agent.vqvae.module.encode(tensor0)
-        quants1 = agent.vqvae.module.encode(tensor1)
+                        tensor0 = torch.tensor(np.array(payload0)).unsqueeze(0).to(agent.device)
+                        tensor1 = torch.tensor(np.array(payload1)).unsqueeze(0).to(agent.device)
 
+                        quants0 = agent.vqvae.module.encode(tensor0)
+                        quants1 = agent.vqvae.module.encode(tensor1)
 
+                        # choose weight and fuse (same strategy)
+                        if app.ctx.fusion_turn % 2 == 0:
+                            weight_p0 = 0.7
+                        else:
+                            weight_p0 = 0.3
+                        fused_quants = fuse_quants_weighted_random(quants0, quants1, block_size=16, weight_p0=weight_p0)
+                        app.ctx.fusion_turn += 1
 
-        # FUNCTIONS FOR COMBINATION OF MOVEMENT
-        
-        # Simple averaging of quants function
-        #fused_quants = fuse_quants_average(quants0, quants1)
+                        zs = agent.gpt.module.sample(fused_quants, shift=shift, length=length)
+                        fused_pose = agent.vqvae.module.decode(zs)
+                        fused_pose = fused_pose.squeeze(0).detach().cpu().numpy().tolist()
+                        fused_pose = format_output(fused_pose)
 
-        block_size = 16
-        # Turn-taking function
-        #fused_quants = fuse_quants_alternating(quants0, quants1, block_size=16)
+                        # store result so followers can reuse it
+                        quant_list = None
+                        # convert zs -> list (use your existing function)
+                        def tensor_to_list_local(obj):
+                            all_rows = []
+                            if isinstance(obj, tuple):
+                                for lst in obj:
+                                    for t in lst:
+                                        if torch.is_tensor(t):
+                                            all_rows.extend(t.detach().cpu().tolist())
+                                        else:
+                                            all_rows.append(t)
+                            elif isinstance(obj, list):
+                                for t in obj:
+                                    if torch.is_tensor(t):
+                                        all_rows.extend(t.detach().cpu().tolist())
+                                    else:
+                                        all_rows.append(t)
+                            elif torch.is_tensor(obj):
+                                all_rows = obj.detach().cpu().tolist()
+                            else:
+                                all_rows = [[obj]]
+                            return all_rows
+                        quant_list = tensor_to_list_local(zs)
 
-        # Randomised, weighted turn-taking
-        fused_quants = fuse_quants_weighted_random(quants0, quants1, block_size=16, weight_p0=0.7)
+                        # prepare response object once; store the JSON so followers return exactly same payload
+                        response_obj = {
+                            "result": fused_pose,
+                            "quant": quant_list,
+                            # note: participantID in stored response should be filled by follower later if you want per-request id
+                        }
+                        app.ctx.fusion_results[startFrameIndex] = response_obj
 
-        # generate fused dance from fused quants
-        zs = agent.gpt.module.sample(fused_quants, shift=shift, length=length)
-        fused_pose = agent.vqvae.module.decode(zs)
-        fused_pose = fused_pose.squeeze(0).detach().cpu().numpy().tolist()
-        fused_pose = format_output(fused_pose)
-        print(f"Fused pose shape: {np.shape(fused_pose)}")
+                        # update prev for both participants
+                        for pid in required_participants:
+                            if pid in app.ctx.state_by_participant:
+                                app.ctx.state_by_participant[pid]["prev"] = fused_pose
+                                app.ctx.state_by_participant[pid]["index"] += 1
 
-        # Update prev state for both participants
-        for pid in required_participants:
-            if pid in app.ctx.state_by_participant:
-                app.ctx.state_by_participant[pid]["prev"] = fused_pose
-                app.ctx.state_by_participant[pid]["index"] += 1
+                        # set result ready so followers continue
+                        result_event.set()
+                        print("[DEBUG] Leader finished fusion and set result_event.")
+                    except Exception as e:
+                        # ensure followers aren't left waiting forever
+                        print(f"[ERROR] Fusion leader failed: {e}", flush=True)
+                        app.ctx.fusion_results[startFrameIndex] = {
+                            "status": "error",
+                            "error": str(e)
+                        }
+                        result_event.set()
+                        raise
 
-        # clean up pending payloads from the shared buffer
-        if startFrameIndex not in app.ctx.fusion_refcount:
-            app.ctx.fusion_refcount[startFrameIndex] = len(required_participants)
+        else:
+            print("[DEBUG] Follower detected result ready; will wait for event/return stored response.")
 
+        # Wait for the result_event (if leader, event already set)
+        await result_event.wait()
+        stored_response = app.ctx.fusion_results[startFrameIndex]
+
+        # prepare final response for this requester (attach participantID)
+        response = {
+            "result": stored_response.get("result"),
+            "quant": stored_response.get("quant"),
+            "participantID": participant_id
+        }
+
+        # cleanup: decrement refcount and remove frame entries when both participants have read result
+        app.ctx.fusion_refcount.setdefault(startFrameIndex, len(required_participants))
         app.ctx.fusion_refcount[startFrameIndex] -= 1
         if app.ctx.fusion_refcount[startFrameIndex] == 0:
+            # delete all per-frame objects
             del app.ctx.fusion_buffer[startFrameIndex]
-            del app.ctx.fusion_events[startFrameIndex]
+            del app.ctx.fusion_locks[startFrameIndex]
+            del app.ctx.fusion_results[startFrameIndex]
+            del app.ctx.fusion_result_events[startFrameIndex]
             del app.ctx.fusion_refcount[startFrameIndex]
+            # optional: also clear the original event
+            if startFrameIndex in app.ctx.fusion_events:
+                del app.ctx.fusion_events[startFrameIndex]
             print(f"Deleted fusion buffer and events for frame {startFrameIndex}.")
 
-        print(f"[DEBUG] zs type: {type(zs)}")
-        print(f"[DEBUG] zs value: {zs}")
-
-        def tensor_to_list(obj):
-            print("Attempting to convert to list...")
-            all_rows = []
-            if isinstance(zs, tuple):
-                for lst in zs:  # lst is usually a list with one tensor
-                    for t in lst:
-                        if torch.is_tensor(t):
-                            all_rows.extend(t.detach().cpu().tolist())
-                        else:
-                            all_rows.append(t)
-            elif isinstance(zs, list):
-                for t in zs:
-                    if torch.is_tensor(t):
-                        all_rows.extend(t.detach().cpu().tolist())
-                    else:
-                        all_rows.append(t)
-            elif torch.is_tensor(zs):
-                all_rows = zs.detach().cpu().tolist()
-            else:
-                all_rows = [[zs]]
-            return all_rows
-
-        quant_list = tensor_to_list(zs)
-
-        response = {
-            'result': fused_pose,
-            'quant': quant_list,
-            'participantID': participant_id
-        }
-        print(f"Returning fused dance to participant {participant_id}")
-
         response_json = json.dumps(response)
-        print(f"Completed fusion for frame {startFrameIndex}, participant {participant_id}. Returning HTTPResponse.")
+        print(f"Returning fused dance to participant {participant_id}")
         return HTTPResponse(body=response_json, status=200)
 
 
@@ -268,6 +310,7 @@ def fuse_quants_weighted_random(quants0, quants1, block_size=16, weight_p0=0.7):
     """
     Randomly chooses blocks from participant 0 or 1's quantized motion sequences according to weight_p0
     """
+    print(f"Current weight is {weight_p0} for p0.")
     if isinstance(quants0, tuple):
         fused_quants = []
         for i in range(len(quants0)):

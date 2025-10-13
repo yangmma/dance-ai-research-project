@@ -48,9 +48,12 @@ async def boostrap(app, loop):
 
 @app.post("/dance-sequence")
 async def generate_dance_sequence(request):
+    """
+    Generates dance sequence based on input payload and game mode, set three modes: 0 for singleplayer, 1 for two agents, 2 for one agent (co-created response)
+    """
     print("received generate dance sequence request")
     request = EasyDict(request.json)
-    game_mode = request.get("gameMode", 0) # 0: singleplayer, 1: two agents, 2: one agent (integrated)
+    game_mode = request.get("gameMode", 0)
     participant_id = request.get("participantID", "unknown")
     print(f"handling request for participant: {participant_id}, gameMode: {game_mode}")
 
@@ -58,16 +61,16 @@ async def generate_dance_sequence(request):
         app.ctx.state_by_participant[participant_id] = {
             "prev": [],
             "index": 0,
-            "pending_payloads": {} # create a dict buffer to ensure both payloads are received before fusing
+            "pending_payloads": {}
         }
 
     state = app.ctx.state_by_participant[participant_id]
 
     startFrameIndex = request.startFrameIndex
     payload = request.payload
-    length = request.length # how long of a clip to generate.
-    shift = request.shift # amount of seed from previous motion clip to take.
-    seed = request.seed # amount of user input to generate from, this will override user input from pos 0.
+    length = request.length # how long of a clip to generate
+    shift = request.shift # amount of seed from previous motion clip to take
+    seed = request.seed # amount of user input to generate from, this will override user input from pos 0
 
     # save payload for analysis
     file = f"dance_{state['index']}_{participant_id}"
@@ -81,7 +84,6 @@ async def generate_dance_sequence(request):
         result = format_output(result)
         print(np.shape(result))
 
-        #app.ctx.prev = result
         state["prev"] = result
         state["index"] += 1
 
@@ -97,29 +99,26 @@ async def generate_dance_sequence(request):
         print(f"CHECK completed generate dance sequence request for {game_mode}")
         return HTTPResponse(body=response, status=200)
     
-    elif game_mode == 2:
+    elif game_mode == 2: # single agent, co-creation
         print(f"Gamemode {game_mode} found, fusing input streams...")
         
-        # Ensure fusion buffer and events exist
+        # ensure fusion buffer and events exist
         if startFrameIndex not in app.ctx.fusion_buffer:
             app.ctx.fusion_buffer[startFrameIndex] = {}
             app.ctx.fusion_events[startFrameIndex] = asyncio.Event()
 
         app.ctx.fusion_buffer[startFrameIndex][participant_id] = payload
-        # Debug: show who is currently in the shared buffer for this frame
         print(f"[DEBUG] Fusion buffer for frame {startFrameIndex}: {list(app.ctx.fusion_buffer[startFrameIndex].keys())}")
-
-        # required participants list
+        
         required_participants = ["0", "1"]
         participant_id = str(request.get("participantID", "unknown"))
         print("Participant id is:", participant_id, type(participant_id))
 
-        #app.ctx.fusion_buffer.setdefault(startFrameIndex, app.ctx.fusion_buffer[startFrameIndex])
-        app.ctx.fusion_events.setdefault(startFrameIndex, asyncio.Event())  # keep for backward compatibility if you want
+        # synchronization init
+        app.ctx.fusion_events.setdefault(startFrameIndex, asyncio.Event())
         app.ctx.fusion_locks = getattr(app.ctx, "fusion_locks", {})
         app.ctx.fusion_results = getattr(app.ctx, "fusion_results", {})
         app.ctx.fusion_result_events = getattr(app.ctx, "fusion_result_events", {})
-
         app.ctx.fusion_locks.setdefault(startFrameIndex, asyncio.Lock())
         app.ctx.fusion_results.setdefault(startFrameIndex, None)
         app.ctx.fusion_result_events.setdefault(startFrameIndex, asyncio.Event())
@@ -145,14 +144,12 @@ async def generate_dance_sequence(request):
                     status=200
                 )
 
-        # BOTH payloads are present now. Use lock+result-event to ensure only ONE fusion happens
+        # BOTH payloads are present now. Use lock+result-event to ensure only ONE fusion happens (otherwise causes bug)
         lock = app.ctx.fusion_locks[startFrameIndex]
         result_event = app.ctx.fusion_result_events[startFrameIndex]
 
         if not result_event.is_set():
-            # leader will perform fusion
             async with lock:
-                # double-check inside lock
                 if not result_event.is_set():
                     try:
                         print("[DEBUG] Leader acquired lock — performing quant-level fusion.")
@@ -166,12 +163,12 @@ async def generate_dance_sequence(request):
                         quants0 = agent.vqvae.module.encode(tensor0)
                         quants1 = agent.vqvae.module.encode(tensor1)
 
-                        # choose weight and fuse (same strategy)
+                        # choose weight and fuse
                         if app.ctx.fusion_turn % 2 == 0:
                             weight_p0 = 0.7
                         else:
                             weight_p0 = 0.3
-                        fused_quants = fuse_quants_weighted_random(quants0, quants1, block_size=16, weight_p0=weight_p0)
+                        fused_quants = fuse_quants_weighted_random(quants0, quants1, block_size=16, weight_p0=weight_p0) # function can be changed if needed
                         app.ctx.fusion_turn += 1
 
                         zs = agent.gpt.module.sample(fused_quants, shift=shift, length=length)
@@ -179,10 +176,12 @@ async def generate_dance_sequence(request):
                         fused_pose = fused_pose.squeeze(0).detach().cpu().numpy().tolist()
                         fused_pose = format_output(fused_pose)
 
-                        # store result so followers can reuse it
                         quant_list = None
-                        # convert zs -> list (use your existing function)
+
                         def tensor_to_list_local(obj):
+                            """
+                            Data conversion to Python list for response
+                            """
                             all_rows = []
                             if isinstance(obj, tuple):
                                 for lst in obj:
@@ -208,17 +207,14 @@ async def generate_dance_sequence(request):
                         response_obj = {
                             "result": fused_pose,
                             "quant": quant_list,
-                            # note: participantID in stored response should be filled by follower later if you want per-request id
                         }
                         app.ctx.fusion_results[startFrameIndex] = response_obj
 
-                        # update prev for both participants
                         for pid in required_participants:
                             if pid in app.ctx.state_by_participant:
                                 app.ctx.state_by_participant[pid]["prev"] = fused_pose
                                 app.ctx.state_by_participant[pid]["index"] += 1
 
-                        # set result ready so followers continue
                         result_event.set()
                         print("[DEBUG] Leader finished fusion and set result_event.")
                     except Exception as e:
@@ -238,24 +234,21 @@ async def generate_dance_sequence(request):
         await result_event.wait()
         stored_response = app.ctx.fusion_results[startFrameIndex]
 
-        # prepare final response for this requester (attach participantID)
         response = {
             "result": stored_response.get("result"),
             "quant": stored_response.get("quant"),
             "participantID": participant_id
         }
 
-        # cleanup: decrement refcount and remove frame entries when both participants have read result
+        # clean up
         app.ctx.fusion_refcount.setdefault(startFrameIndex, len(required_participants))
         app.ctx.fusion_refcount[startFrameIndex] -= 1
         if app.ctx.fusion_refcount[startFrameIndex] == 0:
-            # delete all per-frame objects
             del app.ctx.fusion_buffer[startFrameIndex]
             del app.ctx.fusion_locks[startFrameIndex]
             del app.ctx.fusion_results[startFrameIndex]
             del app.ctx.fusion_result_events[startFrameIndex]
             del app.ctx.fusion_refcount[startFrameIndex]
-            # optional: also clear the original event
             if startFrameIndex in app.ctx.fusion_events:
                 del app.ctx.fusion_events[startFrameIndex]
             print(f"Deleted fusion buffer and events for frame {startFrameIndex}.")
@@ -330,7 +323,7 @@ def fuse_quants_weighted_random(quants0, quants1, block_size=16, weight_p0=0.7):
             fused_quants.append(torch.cat(blocks, dim=0))
         fused_quants = tuple(fused_quants)
     else:
-        # Single participant fallback
+        # Single participant fallback CAN U REVISIT IF THIS FALLBACK IS NECESSARY, COULD BE CLEANED
         q0 = quants0[0]
         q1 = quants1[0]
         total_len = min(q0.shape[0], q1.shape[0])
